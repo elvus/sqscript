@@ -17,12 +17,11 @@ type Properties struct{
 
 func main(){
 	sonarpath, err := os.Executable()
-	sonarpath = sonarpath[0:strings.LastIndex(sonarpath, "/")]
-	fmt.Println(sonarpath+"properties.json")
-	file, err := ioutil.ReadFile(sonarpath+"/properties.json")
+	sonarpath = sonarpath[0:strings.LastIndex(sonarpath, string(os.PathSeparator))]
+	file, err := ioutil.ReadFile(sonarpath+string(os.PathSeparator)+"properties.json")
 	if os.IsNotExist(err) {
 		fmt.Println("No se encontraron las configuraciones correspondientes")
-		makeProperties()
+		makeProperties(sonarpath+string(os.PathSeparator)+"properties.json")
 	} else {
 		props := &Properties{}
 		json.Unmarshal([]byte(file), &props)
@@ -33,13 +32,13 @@ func main(){
 			if(err != nil){
 				fmt.Println(err)
 			}
-			fmt.Print(ex[strings.LastIndex(ex, "/")+1:])
-			runSonar(props, ex, ex[strings.LastIndex(ex, "/")+1:])
+			fmt.Print(ex[strings.LastIndex(ex, string(os.PathSeparator))+1:])
+			runSonar(props, ex, ex[strings.LastIndex(ex, string(os.PathSeparator))+1:])
 		}
 	}
 }
 
-func makeProperties(){
+func makeProperties(path string){
 	//Se ingresa la url donde esta servicio del sonar
     fmt.Print("Ingrese la url del sonar: ")
     var url string
@@ -55,25 +54,39 @@ func makeProperties(){
 	}
 	//Se crea el archivo properties.json
 	jsonB, err := json.MarshalIndent(props, "", " ")
-	err = ioutil.WriteFile("properties.json", jsonB, 0644)
+	err = ioutil.WriteFile(path, jsonB, 0644)
 
 	if err != nil {
-        fmt.Println(err)
+        fmt.Println(err.Error())
         os.Exit(1)
     }
 }
 
 func runSonar(props *Properties, path string, name string){
-	osCommand := map[string]string{"darwin": "/sonar-scanner", "linux": "/sonar-scanner", "windows": "/sonar-scanner.bat"}
+	var command string
+	osCommand := map[string]string{"darwin": string(os.PathSeparator)+"sonar-scanner", "linux": string(os.PathSeparator)+"sonar-scanner", "windows": "/sonar-scanner.bat"}
 	sonarpath, err := os.Executable()
-	sonarpath = sonarpath[0:strings.LastIndex(sonarpath, "/")]
-	command := "sudo "+sonarpath + osCommand[runtime.GOOS]+" -X -D sonar.login=\""+props.Key+"\" -D sonar.host.url="+props.Url+" -D sonar.projectKey="+name+" -D sonar.sources=apiproxy -D sonar.projectBaseDir="+path
-	cmd := exec.Command("bash","-c", command)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-    if err != nil {
-        fmt.Println("Error: "+err.Error())
-        return
-    }
+	sonarpath = strings.ReplaceAll(sonarpath[0:strings.LastIndex(sonarpath, string(os.PathSeparator))], "\\", "/")
+	fmt.Println(sonarpath)
+	if(runtime.GOOS == "windows" ){
+		command = sonarpath + osCommand[runtime.GOOS]+" -X -D sonar.login="+props.Key+" -D sonar.host.url="+props.Url+" -D sonar.projectKey="+name+" -D sonar.sources=apiproxy -D sonar.projectBaseDir="+path
+		cmd := exec.Command("cmd", "/C", command)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			fmt.Println("Error: "+err.Error())
+			return
+		}
+	}else{
+		command = "sudo "+sonarpath + osCommand[runtime.GOOS]+" -X -D sonar.login=\""+props.Key+"\" -D sonar.host.url="+props.Url+" -D sonar.projectKey="+name+" -D sonar.sources=apiproxy -D sonar.projectBaseDir="+path
+		cmd := exec.Command("bash","-c", command)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			fmt.Println("Error: "+err.Error())
+			return
+		}
+	}
 }
